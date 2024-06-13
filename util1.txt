@@ -1,0 +1,167 @@
+Yes, we can use Node.js to handle the JSON parsing and generate the JUnit test cases. Here is a Node.js script that will read a JSON file and generate the corresponding JUnit test class for a POJO.
+
+### Node.js Script (generateTest.js)
+
+javascript
+const fs = require('fs');
+
+// Function to capitalize the first letter of a string
+const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+
+// Function to generate test code for a given class and its fields
+const generateTestCode = (className, fields, indent = '    ') => {
+    let testCode = `${indent}// When\n`;
+    testCode += `${indent}${className} ${className.toLowerCase()} = ${className}.builder()\n`;
+
+    Object.keys(fields).forEach((key) => {
+        const value = fields[key];
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            // Handle inner classes
+            const innerClassName = capitalize(key);
+            const innerTestCode = generateTestCode(innerClassName, value, indent + '    ');
+            testCode = innerTestCode + testCode;
+            testCode += `${indent}        .${key}(${innerClassName.toLowerCase()})\n`;
+        } else {
+            // Handle primitive fields
+            testCode += `${indent}        .${key}(${JSON.stringify(value)})\n`;
+        }
+    });
+
+    testCode += `${indent}        .build();\n\n`;
+    testCode += `${indent}// Then\n`;
+    testCode += `${indent}assertNotNull(${className.toLowerCase()});\n`;
+
+    Object.keys(fields).forEach((key) => {
+        const value = fields[key];
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            testCode += `${indent}assertNotNull(${className.toLowerCase()}.get${capitalize(key)}());\n`;
+            Object.keys(value).forEach((innerKey) => {
+                const innerValue = value[innerKey];
+                testCode += `${indent}assertEquals(${JSON.stringify(innerValue)}, ${className.toLowerCase()}.get${capitalize(key)}().get${capitalize(innerKey)}());\n`;
+            });
+        } else {
+            testCode += `${indent}assertEquals(${JSON.stringify(value)}, ${className.toLowerCase()}.get${capitalize(key)}());\n`;
+        }
+    });
+
+    testCode += '\n';
+    return testCode;
+};
+
+// Main function to generate the test class
+const generateTestClass = (inputFile) => {
+    const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
+
+    const outerClassName = 'OuterClass';
+    const testCode = generateTestCode(outerClassName, data);
+
+    const testClassTemplate = `
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+public class ${outerClassName}Test {
+
+    @Test
+    public void test${outerClassName}BuilderAndGetters() {
+${testCode}
+    }
+}
+`;
+
+    return testClassTemplate;
+};
+
+// Check if input file is provided
+if (process.argv.length < 3) {
+    console.error('Usage: node generateTest.js <input_json_file>');
+    process.exit(1);
+}
+
+const inputFile = process.argv[2];
+const outputFile = 'GeneratedTest.java';
+
+const testClassCode = generateTestClass(inputFile);
+
+// Write the generated test class to the output file
+fs.writeFileSync(outputFile, testClassCode);
+
+console.log(`JUnit test class generated and saved to ${outputFile}`);
+
+
+### How to Use the Script
+
+1. Save the Node.js script to a file named generateTest.js.
+2. Create a JSON file representing your POJO structure. For example, input.json:
+   json
+   {
+       "outerField1": "value1",
+       "outerField2": 42,
+       "innerClass1": {
+           "innerField1": "innerValue1",
+           "innerField2": 123.45
+       },
+       "innerClass2": {
+           "innerField3": "innerValue3",
+           "innerField4": 67.89
+       }
+   }
+   
+3. Install Node.js if you don't have it already:
+   - Download and install Node.js from [nodejs.org](https://nodejs.org/).
+4. Run the script with the JSON file as an argument:
+   bash
+   node generateTest.js input.json
+   
+5. The script will generate a JUnit test class and save it to GeneratedTest.java.
+
+### Example Output
+
+For the provided JSON input, the generated GeneratedTest.java will look like this:
+
+java
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+public class OuterClassTest {
+
+    @Test
+    public void testOuterClassBuilderAndGetters() {
+        // When
+        InnerClass1 innerClass1 = InnerClass1.builder()
+            .innerField1("innerValue1")
+            .innerField2(123.45)
+            .build();
+
+        // When
+        InnerClass2 innerClass2 = InnerClass2.builder()
+            .innerField3("innerValue3")
+            .innerField4(67.89)
+            .build();
+
+        // When
+        OuterClass outerClass = OuterClass.builder()
+            .outerField1("value1")
+            .outerField2(42)
+            .innerClass1(innerClass1)
+            .innerClass2(innerClass2)
+            .build();
+
+        // Then
+        assertNotNull(outerClass);
+        assertEquals("value1", outerClass.getOuterField1());
+        assertEquals(42, outerClass.getOuterField2());
+        assertNotNull(outerClass.getInnerClass1());
+        assertEquals("innerValue1", outerClass.getInnerClass1().getInnerField1());
+        assertEquals(123.45, outerClass.getInnerClass1().getInnerField2());
+        assertNotNull(outerClass.getInnerClass2());
+        assertEquals("innerValue3", outerClass.getInnerClass2().getInnerField3());
+        assertEquals(67.89, outerClass.getInnerClass2().getInnerField4());
+    }
+}
+
+
+This Node.js script provides a more robust way to handle JSON input and generate corresponding JUnit test classes for POJOs.
